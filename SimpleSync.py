@@ -14,14 +14,21 @@ import sublime
 import sublime_plugin
 import subprocess
 import threading
-
+import os
+import string
+import shutil
 #
 # Run a process
 # @param cmd process command
 #
 def runProcess(cmd):
-  p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
+  if os.name == 'nt':
+    print ("Starting windows process in bg")
+    startupinfo = subprocess.STARTUPINFO()
+    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+
+  p = subprocess.Popen(cmd ,startupinfo=startupinfo, stdout=subprocess.PIPE, stderr=subprocess.STDOUT , shell=False)
   while (True):
     retcode = p.poll()             #returns None while subprocess is running
     line    = p.stdout.readline()
@@ -62,11 +69,20 @@ class ScpCopier(threading.Thread):
     threading.Thread.__init__(self)
 
   def run(self):
+
+    #windows replace drive letters
+    if os.name == 'nt':
+      self.local_file = self.local_file.replace("C:", "/c");
+      self.local_file = self.local_file.replace("D:", "/d");
+      self.local_file = self.local_file.replace("\\", "/");
+      self.remote_file = self.remote_file.replace("\\", "/");
+
     remote  = self.username + "@" + self.host + ":" + self.remote_file
 
     print("SimpleSync: ", self.local_file, " -> ", remote)
 
-    for line in runProcess(["scp", "-r", "-P", str(self.port) , self.local_file, remote]):
+    params = ["scp", "-r", "-P", str(self.port) , self.local_file, remote]
+    for line in runProcess(params):
       print(line, end='')
 
 #
@@ -81,8 +97,11 @@ class LocalCopier(threading.Thread):
   def run(self):
     print("SimpleSync: ", self.local_file, " -> ", self.remote_file)
 
-    for line in runProcess(['cp', self.local_file, self.remote_file]):
-      print(line, end='')
+    if os.name == 'nt':
+      shutil.copyfile(self.local_file, self.remote_file)
+    else: 
+      for line in runProcess(['cp', self.local_file, self.remote_file]):
+        print(line, end='')
 
 #
 # Subclass sublime_plugin.EventListener
